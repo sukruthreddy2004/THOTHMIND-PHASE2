@@ -9,7 +9,7 @@ app = Flask(__name__)
 def home():
     return jsonify({
         "status": "ThothMind Phase 2 online",
-        "endpoints": ["/health", "/start", "/reset", "/tick" , "/end"]
+        "endpoints": ["/health", "/reset", "/start", "/tick" , "/end"]
     })
 
 
