@@ -5,6 +5,14 @@ from strategy import decide_action
 
 app = Flask(__name__)
 
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({
+        "status": "ThothMind Phase 2 online",
+        "endpoints": ["/health", "/start", "/reset", "/tick" , "/end"]
+    })
+
+
 def authorized(req):
     return req.headers.get("X-API-Key") == API_KEY
 
