@@ -74,8 +74,7 @@ def health():
     
     return jsonify({
         "status": "ok",
-        "version": "3.0",
-        "uptime": "running"
+        
     })
 
 
