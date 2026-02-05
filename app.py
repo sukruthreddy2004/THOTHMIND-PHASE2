@@ -29,7 +29,7 @@ performance_log = {
 
 
 def log_trade_decision(data, action, balance):
-    """Log each trading decision for analysis"""
+    
     logger.info(
         f"Min {data.get('minute_of_day', '?'):3d} | "
         f"Bal: ${balance:7.2f} | "
@@ -39,16 +39,13 @@ def log_trade_decision(data, action, balance):
     )
 
 
-# ============================================================================
+
 # ENDPOINTS
-# ============================================================================
 
 @app.route("/", methods=["GET"])
-def home():
-    """Root endpoint with bot info"""
+def home(): 
     return jsonify({
         "status": "ThothMind Phase 2 Trading Bot - Running Successfully ",
-        "version": "3.0",
         
         "endpoints": ["/health", "/reset", "/start", "/tick", "/end"],
         "daily_stats": {
@@ -61,26 +58,23 @@ def home():
 
 
 def authorized(req):
-    """Validate API key from request headers"""
     return req.headers.get("X-API-Key") == API_KEY
 
 
 @app.route("/health", methods=["GET"])
 def health():
-    """Health check endpoint"""
     if not authorized(request):
         logger.warning("Unauthorized health check attempt")
         return jsonify({"error": "Unauthorized"}), 401
     
     return jsonify({
         "status": "ok",
-        
+
     })
 
 
 @app.route("/reset", methods=["POST"])
 def reset():
-    """Reset application state"""
     if not authorized(request):
         return jsonify({"error": "Unauthorized"}), 401
     
@@ -101,7 +95,6 @@ def reset():
 
 @app.route("/start", methods=["POST"])
 def start():
-    """Called at start of each trading day"""
     if not authorized(request):
         return jsonify({"error": "Unauthorized"}), 401
     
@@ -123,7 +116,6 @@ def start():
 
 @app.route("/tick", methods=["POST"])
 def tick():
-    """Main trading decision endpoint - called every minute"""
     if not authorized(request):
         return jsonify({"error": "Unauthorized"}), 401
     
@@ -185,7 +177,6 @@ def tick():
 
 @app.route("/end", methods=["POST"])
 def end():
-    """Called at end of each trading day"""
     if not authorized(request):
         return jsonify({"error": "Unauthorized"}), 401
     

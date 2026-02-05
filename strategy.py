@@ -1,9 +1,9 @@
 import numpy as np
 from typing import Dict, List, Tuple, Optional
 
-# ============================================================================
+
 # GLOBAL STATE - Resets each day
-# ============================================================================
+
 
 daily_state = {
     "trades_today": 0,
@@ -32,14 +32,14 @@ def reset_daily_state(initial_balance=1000.0):
     daily_state["losing_trades"] = []
 
 
-# ============================================================================
+
 # TECHNICAL INDICATORS
-# ============================================================================
+
 
 def calculate_rsi(candles: List, period: int = 14) -> float:
-    """Calculate RSI from candle data"""
+    
     if len(candles) < period + 1:
-        return 50.0  # Neutral
+        return 50.0 
     
     closes = [float(c[4]) for c in candles[-(period+1):]]
     
@@ -68,10 +68,7 @@ def calculate_rsi(candles: List, period: int = 14) -> float:
 
 
 def calculate_trend_strength(candles: List, periods: List[int] = [15, 30, 60]) -> Dict:
-    """
-    Analyze trend across multiple timeframes
-    Returns direction and strength
-    """
+    
     if len(candles) < max(periods):
         return {"direction": 0, "strength": 0, "aligned": False}
     
@@ -127,7 +124,7 @@ def calculate_volume_trend(candles: List, period: int = 30) -> Dict:
 
 
 def calculate_volatility(candles: List, period: int = 30) -> float:
-    """Calculate recent volatility (standard deviation of returns)"""
+    
     if len(candles) < period:
         return 0
     
@@ -146,15 +143,12 @@ def calculate_volatility(candles: List, period: int = 30) -> float:
     return float(np.std(returns) * 100)
 
 
-# ============================================================================
+
 # ENTRY LOGIC
-# ============================================================================
+
 
 def analyze_ticker(ticker: str, info: Dict, history: Dict) -> Optional[Dict]:
-    """
-    Comprehensive analysis of a ticker
-    Returns analysis dict or None if not tradeable
-    """
+   
     candles = history.get(ticker, [])
     
     if len(candles) < 60:
@@ -162,49 +156,47 @@ def analyze_ticker(ticker: str, info: Dict, history: Dict) -> Optional[Dict]:
     
     change_24h = info["change_24h_pct"]
     
-    # Filter 1: Volatility must be in tradeable range
-    if abs(change_24h) < 20:  # Below minimum
+    # Volatility must be in tradeable range
+    if abs(change_24h) < 20:  
         return None
-    if abs(change_24h) > 100:  # Too extreme, likely to reverse
+    if abs(change_24h) > 100:  
         return None
     
-    # Filter 2: Calculate technical indicators
+    
     rsi = calculate_rsi(candles, period=14)
     trend = calculate_trend_strength(candles, periods=[15, 30, 60])
     volume = calculate_volume_trend(candles, period=30)
     volatility = calculate_volatility(candles, period=30)
     
-    # Filter 3: Trend alignment required
     if not trend["aligned"]:
         return None
     
-    # Filter 4: 24h trend must match multi-timeframe trend
+   
     if change_24h > 0 and trend["direction"] < 0:
         return None
     if change_24h < 0 and trend["direction"] > 0:
         return None
     
-    # Filter 5: Volume must be sustained
-    if volume["ratio"] < 0.8:  # Volume dropping off
+    
+    if volume["ratio"] < 0.8:  
         return None
     
-    # Filter 6: RSI filters (avoid extreme overbought/oversold)
-    if change_24h > 0:  # For longs
-        if rsi > 80:  # Too overbought
+    if change_24h > 0:
+        if rsi > 80:  
             return None
-        if rsi < 40:  # Not enough momentum
+        if rsi < 40:  
             return None
-    else:  # For shorts
-        if rsi < 20:  # Too oversold
+    else:  
+        if rsi < 20:  
             return None
-        if rsi > 60:  # Not enough downward momentum
+        if rsi > 60:  
             return None
     
-    # Calculate composite score
+    # Calculate score
     momentum_score = abs(change_24h) * 0.4
     trend_score = trend["strength"] * 0.3
     volume_score = min(volume["ratio"], 2.0) * 10 * 0.2
-    rsi_score = (50 - abs(rsi - 50)) * 0.1  # Favor RSI near 50 (balanced)
+    rsi_score = (50 - abs(rsi - 50)) * 0.1  
     
     total_score = momentum_score + trend_score + volume_score + rsi_score
     
@@ -221,9 +213,7 @@ def analyze_ticker(ticker: str, info: Dict, history: Dict) -> Optional[Dict]:
 
 
 def select_best_entry(market_data: Dict, qualifying_tickers: List, history: Dict) -> Optional[Dict]:
-    """
-    Analyze all tickers and select the best entry
-    """
+   
     candidates = []
     
     for ticker in qualifying_tickers:
@@ -239,10 +229,10 @@ def select_best_entry(market_data: Dict, qualifying_tickers: List, history: Dict
     if not candidates:
         return None
     
-    # Sort by score and return best
+    
     best = max(candidates, key=lambda x: x["score"])
     
-    # Require minimum score threshold
+
     if best["score"] < 15:
         return None
     
@@ -250,12 +240,7 @@ def select_best_entry(market_data: Dict, qualifying_tickers: List, history: Dict
 
 
 def calculate_position_size(analysis: Dict, current_balance: float) -> Tuple[int, int]:
-    """
-    Dynamic position sizing based on:
-    - Volatility
-    - Account balance
-    - Win/loss streak
-    """
+    
     change_24h = abs(analysis["change_24h"])
     volatility = analysis.get("volatility", 5)
     
@@ -283,7 +268,7 @@ def calculate_position_size(analysis: Dict, current_balance: float) -> Tuple[int
     
     # Reduce size if balance is down
     drawdown = (daily_state["balance_at_start"] - current_balance) / daily_state["balance_at_start"]
-    if drawdown > 0.2:  # Down more than 20%
+    if drawdown > 0.2:  
         size_pct = int(size_pct * 0.5)
         leverage = max(2, leverage - 1)
     
@@ -294,23 +279,20 @@ def calculate_position_size(analysis: Dict, current_balance: float) -> Tuple[int
     return leverage, size_pct
 
 
-# ============================================================================
+
 # EXIT LOGIC
-# ============================================================================
+
 
 def should_close_position(position: Dict, analysis: Optional[Dict] = None) -> Tuple[bool, str]:
-    """
-    Advanced exit logic with dynamic stops
-    Returns (should_close, reason)
-    """
+    
+    
     pnl_pct = position.get("unrealized_pnl_pct", 0)
     leverage = position.get("leverage", 1)
     entry_time = position.get("entry_time", "")
     
-    # Calculate how long we've been in position (rough estimate)
-    # This is simplified - in production you'd parse timestamps properly
     
-    # Exit 1: Take profit (tiered)
+
+    # Exit 1: Take profit 
     if pnl_pct >= 15:
         return True, f"Major profit target: {pnl_pct:.1f}%"
     if pnl_pct >= 8:
@@ -318,22 +300,22 @@ def should_close_position(position: Dict, analysis: Optional[Dict] = None) -> Tu
     
     # Exit 2: Trailing stop
     if pnl_pct >= 5:
-        # If we were up 5%+ and now below 2%, close
+        
         if pnl_pct < 2:
             return True, f"Trailing stop from peak"
     
     # Exit 3: Dynamic stop loss based on leverage
-    stop_loss_pct = -15 / leverage  # Higher leverage = tighter stop
-    
-    # Wider stop for very high volatility positions
+    stop_loss_pct = -15 / leverage  
+     
+
+   
     if leverage <= 3:
         stop_loss_pct = -20
     
     if pnl_pct <= stop_loss_pct:
         return True, f"Stop loss: {pnl_pct:.1f}%"
     
-    # Exit 4: Time-based stop (if losing and held too long)
-    # Simplified - just check if we're losing
+    
     if pnl_pct < -3 and pnl_pct > stop_loss_pct:
         # Small loss, might want to cut early
         return True, f"Early exit on small loss: {pnl_pct:.1f}%"
@@ -341,14 +323,12 @@ def should_close_position(position: Dict, analysis: Optional[Dict] = None) -> Tu
     return False, "Hold position"
 
 
-# ============================================================================
+
 # MAIN DECISION FUNCTION
-# ============================================================================
+
 
 def decide_action(data: Dict) -> Dict:
-    """
-    Main trading decision logic called every minute
-    """
+    
     position = data.get("position", {})
     account = data.get("account", {})
     market_data = data.get("market_data", {})
@@ -362,11 +342,11 @@ def decide_action(data: Dict) -> Dict:
     if current_balance > daily_state["peak_balance"]:
         daily_state["peak_balance"] = current_balance
     
-    # ========================================================================
-    # CIRCUIT BREAKERS
-    # ========================================================================
     
-    # CB1: Daily loss limit
+    # CIRCUIT BREAKERS
+    
+    
+    # Daily loss limit
     loss_pct = ((current_balance - daily_state["balance_at_start"]) / 
                 daily_state["balance_at_start"] * 100)
     
@@ -375,25 +355,25 @@ def decide_action(data: Dict) -> Dict:
             return {"action": "CLOSE", "reason": "Daily loss limit hit (-40%)"}
         return {"action": "HOLD", "reason": "Daily loss limit - no new trades"}
     
-    # CB2: Profit lock - if up 40%+, become very conservative
+    
     if loss_pct > 40 and not daily_state["profit_locked"]:
         daily_state["profit_locked"] = True
     
-    # CB3: Max trades
+    
     if daily_state["trades_today"] >= daily_state["max_daily_trades"]:
         if position.get("is_open"):
             return {"action": "CLOSE", "reason": "Max daily trades reached"}
         return {"action": "HOLD", "reason": "Trade limit reached"}
     
-    # CB4: Cooling period after consecutive losses
+    
     if daily_state["consecutive_losses"] >= 3:
         time_since_last = minute_of_day - daily_state["last_trade_minute"]
         if time_since_last < 30:
             return {"action": "HOLD", "reason": f"Cooling off ({30-time_since_last}min left)"}
         else:
-            daily_state["consecutive_losses"] = 0  # Reset
+            daily_state["consecutive_losses"] = 0  
     
-    # CB5: Drawdown protection
+    
     drawdown_from_peak = ((daily_state["peak_balance"] - current_balance) / 
                           daily_state["peak_balance"] * 100)
     
@@ -402,7 +382,7 @@ def decide_action(data: Dict) -> Dict:
             return {"action": "CLOSE", "reason": "Drawdown protection (25% from peak)"}
         
     
-    # CB6: Time-based filters
+    
     if minute_of_day < 30:
         return {"action": "HOLD", "reason": "Market opening period - waiting"}
     
@@ -411,9 +391,9 @@ def decide_action(data: Dict) -> Dict:
             return {"action": "CLOSE", "reason": "End of day risk management"}
         return {"action": "HOLD", "reason": "Too close to EOD"}
     
-    # CB7: Profit lock mode - if up 40%, only take best setups
+    
     if daily_state["profit_locked"]:
-        if daily_state["trades_today"] >= 15:  # Reduced limit when protecting profit
+        if daily_state["trades_today"] >= 15:  
             if position.get("is_open"):
                 return {"action": "CLOSE", "reason": "Profit protected - reducing activity"}
             return {"action": "HOLD", "reason": "Protecting +40% profit"}
@@ -427,7 +407,7 @@ def decide_action(data: Dict) -> Dict:
         if should_close:
             pnl_pct = position.get("unrealized_pnl_pct", 0)
             
-            # Update streak tracking
+            
             if pnl_pct > 0:
                 daily_state["consecutive_wins"] += 1
                 daily_state["consecutive_losses"] = 0

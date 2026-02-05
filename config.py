@@ -19,3 +19,4 @@ RSI_PERIOD = int(os.environ.get("RSI_PERIOD", "14"))
 VOLUME_LOOKBACK = int(os.environ.get("VOLUME_LOOKBACK", "30"))
 TRADING_START_DELAY = int(os.environ.get("TRADING_START_DELAY", "30"))  
 TRADING_END_BUFFER = int(os.environ.get("TRADING_END_BUFFER", "45"))   
+
