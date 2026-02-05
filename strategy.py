@@ -2,12 +2,12 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional
 
 
-# GLOBAL STATE - Resets each day
+# GLOBAL STATE 
 
 
 daily_state = {
     "trades_today": 0,
-    "max_daily_trades": 30,
+    "max_daily_trades": 50,
     "balance_at_start": 1000.0,
     "peak_balance": 1000.0,
     "profit_locked": False,
@@ -168,29 +168,26 @@ def analyze_ticker(ticker: str, info: Dict, history: Dict) -> Optional[Dict]:
     volume = calculate_volume_trend(candles, period=30)
     volatility = calculate_volatility(candles, period=30)
     
-    if not trend["aligned"]:
-        return None
-    
-   
     if change_24h > 0 and trend["direction"] < 0:
-        return None
+      return None 
     if change_24h < 0 and trend["direction"] > 0:
-        return None
+      return None
     
     
     if volume["ratio"] < 0.8:  
         return None
     
-    if change_24h > 0:
-        if rsi > 80:  
-            return None
-        if rsi < 40:  
-            return None
-    else:  
-        if rsi < 20:  
-            return None
-        if rsi > 60:  
-            return None
+    # Filter 6: RSI filters (RELAXED)
+    if change_24h > 0:  # For longs
+      if rsi > 85:  # Allow more overbought
+        return None
+      if rsi < 30:  # Lower threshold
+        return None
+    else:  # For shorts
+      if rsi < 15:  # Allow more oversold
+        return None
+      if rsi > 70:  # Higher threshold
+        return None
     
     # Calculate score
     momentum_score = abs(change_24h) * 0.4
@@ -233,7 +230,7 @@ def select_best_entry(market_data: Dict, qualifying_tickers: List, history: Dict
     best = max(candidates, key=lambda x: x["score"])
     
 
-    if best["score"] < 15:
+    if best["score"] < 10:
         return None
     
     return best
@@ -293,10 +290,10 @@ def should_close_position(position: Dict, analysis: Optional[Dict] = None) -> Tu
     
 
     # Exit 1: Take profit 
-    if pnl_pct >= 15:
-        return True, f"Major profit target: {pnl_pct:.1f}%"
-    if pnl_pct >= 8:
-        return True, f"Profit target: {pnl_pct:.1f}%"
+    if pnl_pct >= 10:  
+       return True, f"Major profit target: {pnl_pct:.1f}%"
+    if pnl_pct >= 5: 
+       return True, f"Profit target: {pnl_pct:.1f}%"
     
     # Exit 2: Trailing stop
     if pnl_pct >= 5:
@@ -305,12 +302,12 @@ def should_close_position(position: Dict, analysis: Optional[Dict] = None) -> Tu
             return True, f"Trailing stop from peak"
     
     # Exit 3: Dynamic stop loss based on leverage
-    stop_loss_pct = -15 / leverage  
+    stop_loss_pct = -8 / leverage  
      
 
    
     if leverage <= 3:
-        stop_loss_pct = -20
+        stop_loss_pct = -12
     
     if pnl_pct <= stop_loss_pct:
         return True, f"Stop loss: {pnl_pct:.1f}%"
@@ -368,12 +365,13 @@ def decide_action(data: Dict) -> Dict:
     
     if daily_state["consecutive_losses"] >= 3:
         time_since_last = minute_of_day - daily_state["last_trade_minute"]
-        if time_since_last < 30:
-            return {"action": "HOLD", "reason": f"Cooling off ({30-time_since_last}min left)"}
+        if time_since_last < 5:  # ← 5 MINUTES ONLY
+           return {"action": "HOLD", "reason": f"Cooling off ({5-time_since_last}min left)"}
         else:
             daily_state["consecutive_losses"] = 0  
     
     
+
     drawdown_from_peak = ((daily_state["peak_balance"] - current_balance) / 
                           daily_state["peak_balance"] * 100)
     
