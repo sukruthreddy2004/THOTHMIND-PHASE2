@@ -1,123 +1,82 @@
-# =========================
-# GLOBAL STATE
-# =========================
 
-current_day = None
-daily_pnl = 0.0
-last_trade_minute = None
-traded_today = set()
+STATE = {
+    "day": None,
+    "trading_disabled": False
+}
+DAILY_PROFIT_TARGET = 1000 
 
-# =========================
-# STRATEGY PARAMS
-# =========================
-
-LEVERAGE = 4
-SIZE_PCT = 40
-
-DAILY_PROFIT_LOCK = 600
-DAILY_LOSS_CAP = -400
-
-COOLDOWN_MINUTES = 10
-
-TP_PCT = 8
-SL_PCT = -4
-
-# =========================
-# MAIN LOGIC
-# =========================
 
 def decide_action(data):
-    global current_day, daily_pnl, last_trade_minute, traded_today
+    global STATE
 
-    day = data.get("day")
-    minute = data.get("minute_of_day", 0)
+    position = data["position"]
+    market_data = data.get("market_data", {})
     minutes_left = data.get("minutes_remaining", 0)
 
-    account = data.get("account", {})
-    position = data.get("position", {})
-    market_data = data.get("market_data", {})
-    qualifying = set(data.get("qualifying_tickers", []))
-
-    # =========================
+    
     # DAILY RESET
-    # =========================
-    if current_day != day:
-        current_day = day
-        daily_pnl = 0.0
-        last_trade_minute = None
-        traded_today.clear()
+ 
+    day = data.get("day")
+    if STATE["day"] != day:
+        STATE["day"] = day
+        STATE["trading_disabled"] = False
 
-    # =========================
-    # UPDATE DAILY PNL
-    # =========================
-    daily_pnl = account.get("unrealized_pnl", daily_pnl)
+    # DAILY PROFIT TARGET CHECK
+    
+    account = data.get("account", {})
+    balance = account.get("balance", 1000)
+    equity = account.get("equity", balance)
 
-    # =========================
-    # DAILY LOCKS
-    # =========================
-    if daily_pnl >= DAILY_PROFIT_LOCK:
+    if equity - 1000 >= DAILY_PROFIT_TARGET:
+        STATE["trading_disabled"] = True
+
+    if STATE["trading_disabled"]:
         return {"action": "HOLD", "reason": "Daily profit target reached"}
 
-    if daily_pnl <= DAILY_LOSS_CAP:
-        return {"action": "HOLD", "reason": "Daily loss cap reached"}
-
-    # =========================
-    # POSITION MANAGEMENT
-    # =========================
-    if position.get("is_open"):
-        pnl_pct = position.get("unrealized_pnl_pct", 0)
-
-        if pnl_pct >= TP_PCT:
-            last_trade_minute = minute
-            traded_today.add(position["ticker"])
-            return {"action": "CLOSE", "reason": "Take profit"}
-
-        if pnl_pct <= SL_PCT:
-            last_trade_minute = minute
-            traded_today.add(position["ticker"])
-            return {"action": "CLOSE", "reason": "Stop loss"}
-
-        if minutes_left < 30:
-            return {"action": "CLOSE", "reason": "End of day exit"}
-
-        return {"action": "HOLD"}
-
-    # =========================
-    # COOLDOWN
-    # =========================
-    if last_trade_minute is not None:
-        if minute - last_trade_minute < COOLDOWN_MINUTES:
+  
+    # CASE 1: NO POSITION OPEN
+    if not position["is_open"]:
+        if not market_data:
             return {"action": "HOLD"}
 
-    # =========================
-    # ENTRY LOGIC
-    # =========================
-    candidates = {}
+        qualifying = set(data.get("qualifying_tickers", []))
 
-    for ticker, info in market_data.items():
-        if ticker not in qualifying:
-            continue
-        if ticker in traded_today:
-            continue
+        filtered_market_data = {
+            ticker: info
+            for ticker, info in market_data.items()
+            if ticker in qualifying
+        }
 
-        change = abs(info.get("change_24h_pct", 0))
-        if 22 <= change <= 35:
-            candidates[ticker] = info
+        if not filtered_market_data:
+            return {"action": "HOLD"}
 
-    if not candidates:
-        return {"action": "HOLD"}
+        best_ticker, best_info = max(
+            filtered_market_data.items(),
+            key=lambda x: abs(x[1]["change_24h_pct"])
+        )
 
-    best_ticker, best_info = max(
-        candidates.items(),
-        key=lambda x: abs(x[1]["change_24h_pct"])
-    )
+        change = best_info["change_24h_pct"]
 
-    direction = "OPEN_LONG" if best_info["change_24h_pct"] > 0 else "OPEN_SHORT"
+        action = "OPEN_LONG" if change > 0 else "OPEN_SHORT"
 
-    return {
-        "action": direction,
-        "ticker": best_ticker,
-        "leverage": LEVERAGE,
-        "size_pct": SIZE_PCT,
-        "reason": "Momentum continuation"
-    }
+        return {
+            "action": action,
+            "ticker": best_ticker,
+            "leverage": 6,
+            "size_pct": 60,
+            "reason": "Momentum continuation"
+        }
+
+    # CASE 2: POSITION OPEN
+    pnl_pct = position.get("unrealized_pnl_pct", 0)
+
+    if pnl_pct >= 5:
+        return {"action": "CLOSE", "reason": "Take profit"}
+
+    if pnl_pct <= -3:
+        return {"action": "CLOSE", "reason": "Stop loss"}
+
+    if minutes_left < 30:
+        return {"action": "CLOSE", "reason": "End of day risk management"}
+
+    return {"action": "HOLD"}
