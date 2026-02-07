@@ -1,23 +1,21 @@
 
 import os
 from flask import Flask, request, jsonify
+from config import API_KEY
 from strategy import decide_action
 
 app = Flask(__name__)
-
-API_KEY = os.environ.get("API_KEY")
-
-
-def authorized(req):
-    return API_KEY and req.headers.get("X-API-Key") == API_KEY
-
 
 @app.route("/", methods=["GET"])
 def home():
     return jsonify({
         "status": "ThothMind Phase 2 online",
-        "endpoints": ["/health", "/reset", "/start", "/tick", "/end"]
+        "endpoints": ["/health", "/reset", "/start", "/tick" , "/end"]
     })
+
+
+def authorized(req):
+    return req.headers.get("X-API-Key") == API_KEY
 
 
 @app.route("/health", methods=["GET"])
@@ -25,7 +23,6 @@ def health():
     if not authorized(request):
         return jsonify({"error": "Unauthorized"}), 401
     return jsonify({"status": "ok"})
-
 
 @app.route("/reset", methods=["POST"])
 def reset():
@@ -46,13 +43,9 @@ def tick():
     if not authorized(request):
         return jsonify({"error": "Unauthorized"}), 401
 
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"action": "HOLD"})
-
+    data = request.json
     action = decide_action(data)
     return jsonify(action)
-
 
 @app.route("/end", methods=["POST"])
 def end():
@@ -65,3 +58,4 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     app.run(host="0.0.0.0", port=port)
 
+ 
